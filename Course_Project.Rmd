@@ -1,0 +1,148 @@
+# Coursera - Practical Machine Learning Course Project
+
+## Human Activity Recognition - Weight Lifting Exercise Dataset
+#### Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+#### Six young healthy participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different ways: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes.
+
+#### More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+#### The main goals of this project are:
+#### 1. Predict the manner in which they did the exercise depicted by the classe variable.
+#### 2. Build a prediction model using different features and cross-validation technique.
+#### 3. Calculate the out of sample error.
+#### 4. Use the prediction model to predict 20 different test cases provided. 
+
+## Data retrieval, processing and transformation
+#### This section includes of the steps to get the required data for this project, clean and process the data.
+
+### Getting the required data
+#### The training data for this project are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+#### The test data are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+```{r}
+trainURL<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testURL <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(trainURL, "pml-training.csv",  method="curl")
+download.file(testURL, "pml-testing.csv",  method="curl")
+```
+### Loading the data
+```{r}
+training <- read.csv("pml-training.csv",na.strings=c("NA",""))
+testing <-read.csv("pml-testing.csv",na.strings=c("NA",""))
+```
+### Processing the data
+#### We first check for the total number of NAs in the dataset and then total NAs in each training and testing datasets.
+```{r}
+sum(is.na(training))
+```
+```{r}
+na_train = sapply(training, function(x) {sum(is.na(x))})
+table(na_train)
+```
+```{r}
+na_test = sapply(testing, function(x) {sum(is.na(x))})
+table(na_test)
+```
+#### Looking at the above values it is clear that 60 variables have 0 NA values while the rest have NA values for almost all the rows of the dataset, so we are going to ignore them using the following code .
+
+```{r}
+# for training dataset
+columnNACounts <- colSums(is.na(training))        # getting NA counts for all columns
+badColumns <- columnNACounts >= 19000             # ignoring columns with majority NA values
+cleanTrainingdata <- training[!badColumns]        # getting clean data
+sum(is.na(cleanTrainingdata))                     # checking for NA values
+cleanTrainingdata <- cleanTrainingdata[, c(7:60)] # removing unnecessary columns
+```
+```{r}
+# for testing dataset
+columnNACounts <- colSums(is.na(testing))         # getting NA counts for all columns
+badColumns <- columnNACounts >= 20                # ignoring columns with majority NA values
+cleanTestingdata <- testing[!badColumns]        # getting clean data
+sum(is.na(cleanTestingdata))                     # checking for NA values
+cleanTestingdata <- cleanTestingdata[, c(7:60)] # removing unnecessary columns
+```
+#### Now the dataset don’t have any NA values. Therefore, data can be now used for some exploratory analysis and prediction model. 
+
+## Exploratory Data Analysis
+#### We look at some summary statistics and frequency plot for the "classe" variable.
+```{r}
+summary(cleanTrainingdata$classe)
+```
+```{r}
+plot(cleanTrainingdata$classe,col=c("red", "green", "yellow", "blue", "orange"),main = "`classe` frequency plot", xlab = "Types of Weight Lifting Exercices")
+```
+
+## Model Building
+#### In this section, we will build a machine learning model for predicting the classe value based on the other features of the dataset. 
+
+### Data partitioning
+#### We first partition the cleanTrainingdata dataset into training and testing data sets for building model
+```{r}
+library (caret)
+inTrain <- createDataPartition(y=cleanTrainingdata$classe, p=0.6, list=FALSE)
+trainingdata <- cleanTrainingdata[inTrain,]
+testingdata <- cleanTrainingdata[-inTrain,]
+dim(trainingdata)
+```
+### Model building
+#### Next, we use the features in the trainingdata dataset, we will build our model using the Random Forest machine learning technique.
+```{r}
+model <- train(trainingdata$classe ~., data = trainingdata, method = "rf", prox = TRUE, 
+               trControl = trainControl(method = "cv", number = 4, allowParallel = TRUE))
+print (model)
+```
+#### We build the model using 4-fold cross validation.
+
+### In sample accuracy
+#### Now we calculate the "in sample"" accuracy which is the prediction accuracy of our model on the training data set.
+```{r}
+training_pred <- predict(model, trainingdata)
+confusionMatrix(training_pred, trainingdata$classe)
+```
+#### Thus, from the above statistics we see that the in sample accuracy value is 1 which is 100%. 
+
+## Out of sample accuracy
+We also calculate the "out of sample" accuracy which is the prediction accuracy of our model on the testing data set.
+```{r}
+testing_pred <- predict(model, testingdata)
+confusionMatrix(testing_pred, testingdata$classe)
+```
+#### Thus, from the above statistics we see that the out of sample accuracy value is 0.996 which is 99.6%.
+
+## Prediction Assignment
+#### In this section, we apply the above machine learning algorithm to each of the 20 test cases in the testing data set provided.
+```{r}
+answers <- predict(model, cleanTestingdata)
+answers <- as.character(answers)
+answers
+```
+#### Finally, we write the answers to files as specified by the course instructor using the following code segment.
+```{r}
+pml_write_files = function(x) {
+    n = length(x)
+    for (i in 1:n) {
+        filename = paste0("problem_id_", i, ".txt")
+        write.table(x[i], file = filename, quote = FALSE, row.names = FALSE, 
+            col.names = FALSE)
+    }
+}
+
+pml_write_files(answers)
+```
+
+#### On submission, a score of 20/20 can be obtained if all the predicted values are correct. 
+
+## Conclusions
+#### For this project, we chose Random Forest as our machine learning algorithm to build our model as,
+#### 1. It builds a highly accurate classifier.
+#### 2. It can handle thousands of variables.
+#### 3. It balances bias and variance trade-offs by settling for a balanced model.
+#### 4. It uses k-fold cross validation to build a robust model.
+#### We also obtained a really good accuracy based on the statistics we obtained above.
+
+
+
+
+
+
+
